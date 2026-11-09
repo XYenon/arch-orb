@@ -1,0 +1,105 @@
+name: lint
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jactionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run jactionlint
+        uses: jdx/jactionlint@9e87e8f34edfc00b849a27807e26eff9d00b936d # v2.5.0
+
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SHELLCHECK_VERSION: v0.11.0
+      SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+      SHFMT_VERSION: v3.14.1
+      SHFMT_SHA256: 76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install shellcheck and shfmt
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/tools"
+          mkdir -p "$tools"
+
+          curl -fsSL -o "$tools/shellcheck.tar.xz" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  $tools/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$tools/shellcheck.tar.xz" -C "$tools"
+
+          curl -fsSL -o "$tools/shfmt" \
+            "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_linux_amd64"
+          echo "${SHFMT_SHA256}  $tools/shfmt" | sha256sum -c -
+          chmod 0755 "$tools/shfmt"
+
+          printf '%s\n' "$tools/shellcheck-${SHELLCHECK_VERSION}" "$tools" >> "$GITHUB_PATH"
+
+      - name: Run shellcheck
+        shell: bash
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck
+
+      - name: Check shell formatting
+        shell: bash
+        run: git ls-files -z '*.sh' | xargs -0 shfmt -d
+
+  markdown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      RUMDL_VERSION: v0.3.2
+      RUMDL_SHA256: f527d1374765d826c1627ceab3d1f46e548268731a495b5b12a3af529b3d79e8
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install rumdl
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/tools"
+          mkdir -p "$tools"
+
+          curl -fsSL -o "$tools/rumdl.tar.gz" \
+            "https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${RUMDL_SHA256}  $tools/rumdl.tar.gz" | sha256sum -c -
+          tar -xzf "$tools/rumdl.tar.gz" -C "$tools"
+          chmod 0755 "$tools/rumdl"
+
+          printf '%s\n' "$tools" >> "$GITHUB_PATH"
+
+      - name: Run rumdl
+        shell: bash
+        run: git ls-files -z '*.md' | xargs -0 rumdl check
