@@ -8,7 +8,7 @@ AMP_IMAGE=${AMP_IMAGE:-us-central1-docker.pkg.dev/amp-prod-0/amp-orb/amp-orb:lat
 ARCH_MIRROR=${ARCH_MIRROR:-https://geo.mirror.pkgbuild.com}
 ARCHLINUXCN_MIRROR=${ARCHLINUXCN_MIRROR:-https://repo.archlinuxcn.org}
 BASE_IMAGE=${BASE_IMAGE:-quay.io/archlinux/archlinux:latest}
-CONTAINER_ENGINE=${CONTAINER_ENGINE:-podman}
+CONTAINER_ENGINE=${CONTAINER_ENGINE:-docker}
 
 if ! command -v "$CONTAINER_ENGINE" >/dev/null 2>&1; then
 	echo "error: $CONTAINER_ENGINE is required" >&2

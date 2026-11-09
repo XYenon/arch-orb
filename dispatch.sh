@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Podman dispatch program for Amp self-hosted orbs using the arch-orb image.
+# Docker dispatch program for Amp self-hosted orbs using the arch-orb image.
 #
 # Run the provider with ORB_IMAGE=arch-orb:latest so Amp passes this image to
 # every spawn job:
@@ -9,14 +9,14 @@
 #
 # Each operation is safe to repeat and finishes well within Amp's five-minute
 # limit. Pause keeps the disk; when Amp supplies ORB_SNAPSHOT_ID, the container
-# is committed to a local Podman image for project snapshots.
+# is committed to a local image for project snapshots.
 
 set -euo pipefail
 
 : "${ORB_OPERATION:?ORB_OPERATION is required}"
 : "${ORB_ID:?ORB_ID is required}"
 
-CONTAINER_ENGINE=${CONTAINER_ENGINE:-podman}
+CONTAINER_ENGINE=${CONTAINER_ENGINE:-docker}
 IMAGE=${ORB_IMAGE:-arch-orb:latest}
 PLATFORM=${ORB_PLATFORM:-linux/amd64}
 SNAPSHOT=${ORB_SNAPSHOT_ID:-}

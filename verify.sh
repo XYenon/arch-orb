@@ -3,7 +3,7 @@
 # features that image enables (Portals, Terminal, Desktop, git, Amp CLI).
 #
 # Run from the host:
-#   podman run --rm --shm-size=1g -v "$PWD/verify.sh:/tmp/verify.sh:ro" \
+#   docker run --rm --shm-size=1g -v "$PWD/verify.sh:/tmp/verify.sh:ro" \
 #     arch-orb:latest bash /tmp/verify.sh
 #
 # The script runs as the image's default "user"; it uses sudo where the orb
