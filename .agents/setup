@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Prepare a fresh Amp orb for work on this repository. The repository has no
+# language dependencies: its toolchain is the set of linters that CI runs, so
+# install those once instead of downloading them in every orb.
+#
+# The image build itself needs a container engine. Docker and Podman cannot run
+# nested containers inside an orb, so builds belong to GitHub Actions; this
+# script only prepares the checks that run before a push.
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo_root"
+
+# Keep these versions and checksums in sync with .github/workflows/lint.yml.
+shellcheck_version=v0.11.0
+shellcheck_sha256=8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+shfmt_version=v3.14.1
+shfmt_sha256=76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
+rumdl_version=v0.3.2
+rumdl_sha256=f527d1374765d826c1627ceab3d1f46e548268731a495b5b12a3af529b3d79e8
+jactionlint_version=v2.5.0
+jactionlint_sha256=5ac307b0499bb0eab45ae99c23e8e0790874fbc667c75224410954e0e3c6e0f5
+
+tools_dir=/usr/local/bin
+start=$(date +%s)
+
+log() { printf '[setup] %s\n' "$1"; }
+
+# Every pinned archive is x86_64, matching the image this repository builds.
+if [ "$(uname -m)" != x86_64 ]; then
+	log "unsupported architecture $(uname -m); skipping x86_64-only lint tools"
+	exit 0
+fi
+
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_dir"' EXIT
+
+download() {
+	local url=$1 output=$2
+	curl -fsSL --retry 3 --retry-delay 2 -o "$output" "$url"
+}
+
+verify() {
+	local sha256=$1 file=$2
+	printf '%s  %s\n' "$sha256" "$file" | sha256sum -c -
+}
+
+if [ "$(shellcheck --version 2>/dev/null | awk '/^version:/ {print $2}')" != "${shellcheck_version#v}" ]; then
+	log "installing shellcheck $shellcheck_version"
+	download "https://github.com/koalaman/shellcheck/releases/download/${shellcheck_version}/shellcheck-${shellcheck_version}.linux.x86_64.tar.xz" "$tmp_dir/shellcheck.tar.xz"
+	verify "$shellcheck_sha256" "$tmp_dir/shellcheck.tar.xz"
+	tar -xJf "$tmp_dir/shellcheck.tar.xz" -C "$tmp_dir"
+	sudo install -m 0755 "$tmp_dir/shellcheck-${shellcheck_version}/shellcheck" "$tools_dir/shellcheck"
+else
+	log "shellcheck ${shellcheck_version#v} already installed"
+fi
+
+if [ "$(shfmt --version 2>/dev/null | sed 's/^v//')" != "${shfmt_version#v}" ]; then
+	log "installing shfmt $shfmt_version"
+	download "https://github.com/mvdan/sh/releases/download/${shfmt_version}/shfmt_${shfmt_version}_linux_amd64" "$tmp_dir/shfmt"
+	verify "$shfmt_sha256" "$tmp_dir/shfmt"
+	sudo install -m 0755 "$tmp_dir/shfmt" "$tools_dir/shfmt"
+else
+	log "shfmt ${shfmt_version#v} already installed"
+fi
+
+if [ "$(rumdl --version 2>/dev/null | awk '{print $2}')" != "${rumdl_version#v}" ]; then
+	log "installing rumdl $rumdl_version"
+	download "https://github.com/rvben/rumdl/releases/download/${rumdl_version}/rumdl-${rumdl_version}-x86_64-unknown-linux-gnu.tar.gz" "$tmp_dir/rumdl.tar.gz"
+	verify "$rumdl_sha256" "$tmp_dir/rumdl.tar.gz"
+	tar -xzf "$tmp_dir/rumdl.tar.gz" -C "$tmp_dir"
+	sudo install -m 0755 "$tmp_dir/rumdl" "$tools_dir/rumdl"
+else
+	log "rumdl ${rumdl_version#v} already installed"
+fi
+
+if [ "$(jactionlint --version 2>/dev/null | awk 'NR == 1 {print $1}')" != "${jactionlint_version#v}" ]; then
+	log "installing jactionlint $jactionlint_version"
+	download "https://github.com/jdx/jactionlint/releases/download/${jactionlint_version}/jactionlint_${jactionlint_version#v}_linux_amd64.tar.gz" "$tmp_dir/jactionlint.tar.gz"
+	verify "$jactionlint_sha256" "$tmp_dir/jactionlint.tar.gz"
+	tar -xzf "$tmp_dir/jactionlint.tar.gz" -C "$tmp_dir"
+	sudo install -m 0755 "$tmp_dir/jactionlint" "$tools_dir/jactionlint"
+else
+	log "jactionlint ${jactionlint_version#v} already installed"
+fi
+
+log "lint tools ready in $(($(date +%s) - start))s"
