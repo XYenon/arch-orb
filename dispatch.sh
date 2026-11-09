@@ -9,12 +9,15 @@
 #
 # Each operation is safe to repeat and finishes well within Amp's five-minute
 # limit. Pause keeps the disk; when Amp supplies ORB_SNAPSHOT_ID, the container
-# is committed to a local image for project snapshots.
+# is committed to a local image for project snapshots. Bootstrap output goes to
+# ~/.amp-bootstrap.log inside the orb.
 
 set -euo pipefail
 
 : "${ORB_OPERATION:?ORB_OPERATION is required}"
 : "${ORB_ID:?ORB_ID is required}"
+
+trap 'echo "dispatch: ${ORB_OPERATION:-?} ${ORB_ID:-?} failed at line $LINENO" >&2' ERR
 
 CONTAINER_ENGINE=${CONTAINER_ENGINE:-docker}
 IMAGE=${ORB_IMAGE:-arch-orb:latest}
@@ -25,7 +28,7 @@ container_exists() {
 	if [ "$CONTAINER_ENGINE" = "podman" ]; then
 		"$CONTAINER_ENGINE" container exists "$ORB_ID" >/dev/null 2>&1
 	else
-		"$CONTAINER_ENGINE" inspect "$ORB_ID" >/dev/null 2>&1
+		"$CONTAINER_ENGINE" container inspect "$ORB_ID" >/dev/null 2>&1
 	fi
 }
 
@@ -39,6 +42,8 @@ image_exists() {
 
 case "$ORB_OPERATION" in
 spawn)
+	: "${ORB_TOKEN:?ORB_TOKEN is required for spawn}"
+
 	if [ -n "$SNAPSHOT" ] && image_exists "$SNAPSHOT"; then
 		boot_image=$SNAPSHOT
 	else
@@ -67,14 +72,20 @@ spawn)
 
 	# The image's default user is "user"; bootstrap runs detached as that user.
 	# $HOME belongs to the container, so the single quotes are intentional.
+	# A fixed umask keeps files created by .agents/setup readable and not
+	# world-writable, regardless of the container engine's default.
 	# shellcheck disable=SC2016
 	"$CONTAINER_ENGINE" exec -d "${env_args[@]}" "$ORB_ID" \
-		bash -c 'exec amp orb bootstrap >>"$HOME/.amp-bootstrap.log" 2>&1'
+		bash -c 'umask 022; exec amp orb bootstrap >>"$HOME/.amp-bootstrap.log" 2>&1'
 	;;
 
 pause)
 	if container_exists; then
-		"$CONTAINER_ENGINE" stop "$ORB_ID" >/dev/null 2>&1 || true
+		# A container left in the created state by a failed spawn is already
+		# stopped, and stopping it again would fail; only stop a running one.
+		if [ "$("$CONTAINER_ENGINE" container inspect --format '{{.State.Running}}' "$ORB_ID" 2>/dev/null)" = "true" ]; then
+			"$CONTAINER_ENGINE" stop "$ORB_ID" >/dev/null
+		fi
 		if [ -n "$SNAPSHOT" ]; then
 			"$CONTAINER_ENGINE" commit "$ORB_ID" "$SNAPSHOT" >/dev/null
 		fi

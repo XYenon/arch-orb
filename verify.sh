@@ -36,16 +36,6 @@ check() {
 	fi
 }
 
-check_shell() {
-	local description=$1
-	local command=$2
-	if bash -c "$command" >/dev/null 2>&1; then
-		ok "$description"
-	else
-		bad "$description"
-	fi
-}
-
 version_at_least() {
 	local have=$1
 	local want=$2
@@ -74,6 +64,7 @@ printf '        %s\n' "$(grep VERSION_ID /etc/os-release | cut -d= -f2- | tr -d 
 if [ "$(uname -m)" = "x86_64" ]; then ok "x86_64 architecture"; else bad "x86_64 architecture"; fi
 check "bash, coreutils, util-linux" bash -c 'command -v bash ls date flock mount findmnt >/dev/null'
 check "CA certificate bundle" test -s /etc/ssl/certs/ca-certificates.crt
+check "curl installed" bash -c 'command -v curl >/dev/null'
 
 section "Licensing"
 check "AGPL license included in image" test -s /usr/share/licenses/arch-orb/LICENSE
@@ -116,6 +107,9 @@ else
 	bad "amp resolves to the updatable binary"
 fi
 if amp --version 2>/dev/null | grep -qE '^[0-9]'; then ok "amp --version"; else bad "amp --version"; fi
+check "amp orb bootstrap is available" bash -c 'amp orb bootstrap --help >/dev/null'
+check "amp binary is writable for self-updates" test -w /home/user/.amp/bin/amp
+check "amp bin directory is writable" test -w /home/user/.amp/bin
 check "amp orb desktop ensure is available" bash -c 'amp orb desktop ensure --help >/dev/null'
 check "amp orb service is available" bash -c 'amp orb service --help >/dev/null'
 check "agent-browser runs" agent-browser --version
@@ -195,11 +189,17 @@ if (
 else
 	bad "git signed commit works"
 fi
+if git clone -q "$SIGN_REPO" "$TMP_ROOT/git-clone"; then
+	ok "git clone works"
+else
+	bad "git clone works"
+fi
 
 section "Node.js and Portals requirements"
 NODE_VERSION=$(node --version | sed 's/^v//')
 if version_at_least "$NODE_VERSION" "18.0.0"; then ok "node >= 18 ($NODE_VERSION)"; else bad "node >= 18 ($NODE_VERSION)"; fi
 check "npm installed" npm --version
+check "NODE_OPTIONS uses the system CA" test "${NODE_OPTIONS:-}" = "--use-system-ca"
 if (
 	node -e 'const s = require("http").createServer((q, r) => r.end("portal-ok")); s.listen(0, "127.0.0.1", () => console.log(s.address().port))' >"$TMP_ROOT/node-port" 2>/dev/null &
 	node_pid=$!
@@ -217,6 +217,15 @@ if (
 	ok "node HTTP server works"
 else
 	bad "node HTTP server works"
+fi
+if (
+	node -e 'const https = require("https"); const request = https.get("https://static.ampcode.com/cli/cli-version.txt", (response) => { console.log(response.statusCode); response.resume(); process.exit(response.statusCode === 200 ? 0 : 1); }); request.on("error", (error) => { console.error(error.message); process.exit(1); }); setTimeout(() => process.exit(2), 30000);' >"$TMP_ROOT/node-https" 2>&1
+	grep -q '^200$' "$TMP_ROOT/node-https"
+); then
+	ok "node HTTPS with system CA"
+else
+	bad "node HTTPS with system CA"
+	sed 's/^/        /' "$TMP_ROOT/node-https" 2>/dev/null | head -5
 fi
 
 section "Terminal requirements"
@@ -330,6 +339,14 @@ else
 	sed 's/^/        /' "$TMP_ROOT/chrome.log" 2>/dev/null | head -10
 fi
 
+section "Shared memory"
+SHM_MB=$(df -m /dev/shm | awk 'NR==2 {print $2}')
+if [ "${SHM_MB:-0}" -ge 512 ]; then
+	ok "/dev/shm >= 512 MB (${SHM_MB} MB)"
+else
+	bad "/dev/shm >= 512 MB (${SHM_MB:-unknown} MB; run with --shm-size=1g)"
+fi
+
 section "Network and CA"
 if curl -fsS --max-time 30 -o /dev/null https://static.ampcode.com/cli/cli-version.txt; then
 	ok "HTTPS to static.ampcode.com with system CA"
@@ -340,6 +357,16 @@ if curl -fsS --max-time 30 -o /dev/null https://archlinux.org/; then
 	ok "HTTPS to archlinux.org with system CA"
 else
 	bad "HTTPS to archlinux.org with system CA"
+fi
+if curl -fsS --max-time 30 -o /dev/null https://ampcode.com/; then
+	ok "HTTPS to ampcode.com with system CA"
+else
+	bad "HTTPS to ampcode.com with system CA"
+fi
+if curl -sS --max-time 30 -o /dev/null https://tunnel.ampcode.com/; then
+	ok "TLS to tunnel.ampcode.com"
+else
+	bad "TLS to tunnel.ampcode.com"
 fi
 
 section "Summary"

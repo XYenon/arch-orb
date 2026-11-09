@@ -18,18 +18,20 @@
 # and last the permission fixes and licensing files that are cheap to redo.
 
 ARG AMP_IMAGE=us-central1-docker.pkg.dev/amp-prod-0/amp-orb/amp-orb:latest
+ARG BASE_IMAGE=quay.io/archlinux/archlinux:latest
 
 FROM ${AMP_IMAGE} AS amp
 
-FROM quay.io/archlinux/archlinux:latest
+FROM ${BASE_IMAGE}
 
+ARG BASE_IMAGE
 ARG ARCH_MIRROR=https://geo.mirror.pkgbuild.com
 ARG ARCHLINUXCN_MIRROR=https://repo.archlinuxcn.org
 
 LABEL org.opencontainers.image.title="arch-orb" \
       org.opencontainers.image.description="Arch Linux image for Amp self-hosted orbs" \
       org.opencontainers.image.source="https://github.com/XYenon/arch-orb" \
-      org.opencontainers.image.base.name="quay.io/archlinux/archlinux:latest"
+      org.opencontainers.image.base.name="${BASE_IMAGE}"
 
 ENV LANG=C.UTF-8 \
     HOME=/home/user \

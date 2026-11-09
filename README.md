@@ -42,8 +42,22 @@ does not run as PID 1, and Amp starts Portals, Terminal, and Desktop directly.
 
 Set `CONTAINER_ENGINE=podman` to use Podman instead of Docker.
 
-This image is built for `x86_64`. For ARM64, use an ARM64 Arch base, the ARM64 Chrome
-package, and `ORB_PLATFORM=linux/arm64`.
+This image targets `x86_64`. The Dockerfile and `verify.sh` are x86_64-specific
+(pinned x86_64 libxml2/ICU paths, the Chrome AUR package, and
+`dpkg --print-architecture`), so an ARM64 build needs matching changes.
+`ORB_PLATFORM` selects the runtime platform.
+
+## Provider Notes
+
+- `ORB_TYPE` is ignored: every orb gets the same container. If you configure
+  orb types, extend `dispatch.sh` to map them to `--cpus`/`--memory`.
+- The dispatch sets no CPU or memory limits; multiple orbs share the host.
+- `docker commit` project snapshot images are local and are not deleted by
+  Amp. Prune them periodically, or label them in `dispatch.sh` and clean them
+  with a filter.
+- Podman needs `catatonit` for the dispatch's `--init` flag; Arch's `podman`
+  package depends on it.
+- Bootstrap output is written to `~/.amp-bootstrap.log` inside the orb.
 
 ## What is included
 
@@ -67,11 +81,15 @@ package, and `ORB_PLATFORM=linux/arm64`.
 
 ## Building from Source
 
-The build uses Docker by default:
+The build uses Docker by default and targets `linux/amd64`:
 
 ```bash
 ./build.sh
 ```
+
+Set `ORB_PLATFORM` to select another platform (with the matching `BASE_IMAGE`,
+`AMP_IMAGE`, and Dockerfile changes). `BASE_IMAGE` and `AMP_IMAGE` select the
+Arch base and the Amp source image.
 
 To build using Podman instead:
 
@@ -91,8 +109,9 @@ ARCHLINUXCN_MIRROR=https://mirrors.bfsu.edu.cn/archlinuxcn \
 
 ## Verification
 
-The verification script checks every item in the Bring Your Own Image contract
-plus the features those requirements enable:
+The verification script checks the image against Amp's
+[Bring Your Own Image contract](https://ampcode.com/docs/orbs/self-hosted#bring-your-own-image)
+and the features those requirements enable:
 
 ```bash
 # Podman
@@ -146,7 +165,9 @@ Both the default official-mirror build and a BFSU-mirror build pass this check.
 
 - `.github/workflows/build.yml`: Builds `linux/amd64` with Buildx and pushes to
   `ghcr.io/xyenon/arch-orb` on pushes to `master`, version tags, and manual
-  triggers. Pull requests build without pushing.
+  triggers. Pull requests build without pushing. The workflow does not run
+  `verify.sh`; run it locally or add a verification step before relying on a
+  pushed image.
 - `.github/workflows/lint.yml`: Validates workflows with `jactionlint`, shell
   scripts with `shellcheck` + `shfmt -d`, and Markdown files with `rumdl`.
 
